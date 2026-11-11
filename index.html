@@ -239,25 +239,48 @@
 
      <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // 1. ค่าเริ่มต้นกรณีเปิดระบบครั้งแรก
-            var defaultData = [
-                { id: 1, status: 'normal', statusText: 'ใบอนุญาตปกติ', licenseNo: 'เลขที่ 123/2569', bizName: 'โรงสีข้าวเขาดินเจริญพาณิชย์', ownerName: 'นายสมชาย มั่นคง', typeText: 'สีข้าวด้วยเครื่องจักร', address: '45/1 หมู่ 2 ตำบลเขาดิน', expireDate: '31 ธ.ค. 2570', mapUrl: 'https://google.com', imgUrl: 'https://unsplash.com' },
-                { id: 2, status: 'warning', statusText: 'ใกล้หมดอายุ', licenseNo: 'เลขที่ 87/2566', bizName: 'ฟาร์มหมูผู้ใหญ่สมศักดิ์', ownerName: 'นายสมศักดิ์ รักดี', typeText: 'การเลี้ยงสุกร', address: '12 หมู่ 4 ตำบลเขาดิน', expireDate: '31 ธ.ค. 2569', mapUrl: '', imgUrl: '' },
-                { id: 3, status: 'danger', statusText: 'หมดอายุแล้ว', licenseNo: 'เลขที่ 05/2569', bizName: 'อู่ซ่อมรถยนต์สปีดเซอร์วิส', ownerName: 'นายวิชัย ยินดีเจริญ', typeText: 'อู่ซ่อมและพ่นสีรถยนต์', address: '9/3 หมู่ 1 ตำบลเขาดิน', expireDate: '31 ต.ค. 2569', mapUrl: '', imgUrl: '' }
-            ];
+            // ลิงก์เชื่อมต่อฐานข้อมูล Google Sheets ของ อบต.เขาดิน
+            const API_URL = 'https://script.google.com/macros/s/AKfycbz-TN3kLWLNR20gHH3fnfTn2jcgecb-OkjWLq0phd5BQQj9uCgVu_T7Yy3ZfnB12KrC/exec';
 
-            var localData = localStorage.getItem('bizDatabase');
-            if (!localData || localData === '') {
-                localStorage.setItem('bizDatabase', JSON.stringify(defaultData));
-                localData = JSON.stringify(defaultData);
-            }
-
-            var mockDatabase = JSON.parse(localData);
+            var mockDatabase = [];
             var selectedEditId = null;
             var editorPopup = document.getElementById('data-editor-popup');
             var viewPopup = document.getElementById('view-details-popup');
             var cardsBox = document.getElementById('cards-list-box');
             var dataForm = document.getElementById('editor-data-form');
+
+            // 1. ฟังก์ชันโหลดข้อมูลจาก Google Sheets
+            async function loadDatabaseFromSheets() {
+                if (cardsBox) {
+                    cardsBox.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: #64748b; font-weight: 600;">⏳ กำลังดึงข้อมูลจากฐานข้อมูล อบต.เขาดิน...</div>';
+                }
+                try {
+                    const response = await fetch(API_URL);
+                    const data = await response.json();
+                    mockDatabase = Array.isArray(data) ? data : [];
+                    updateDashboardStats();
+                    renderBusinessCards(mockDatabase);
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                    if (cardsBox) {
+                        cardsBox.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 2rem; color: #ef4444;">⚠️ ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณารีเฟรชหน้าเว็บใหม่อีกครั้ง</div>';
+                    }
+                }
+            }
+
+            // 2. ฟังก์ชันส่งข้อมูลไปบันทึก/แก้ไข/ลบ บน Google Sheets
+            async function syncToSheets(payload) {
+                try {
+                    await fetch(API_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } catch (error) {
+                    console.error('Error syncing data:', error);
+                }
+            }
 
             function updateDashboardStats() {
                 document.getElementById('stat-normal-val').textContent = mockDatabase.filter(function(i) { return i.status === 'normal'; }).length + ' ราย';
@@ -265,17 +288,20 @@
                 document.getElementById('stat-danger-val').textContent = mockDatabase.filter(function(i) { return i.status === 'danger'; }).length + ' ราย';
             }
 
-            // 2. ฟังก์ชันวาดการ์ดเวอร์ชันแกะสไตล์แยกส่วน บล็อกไม่ให้เครื่องหมายคำพูดขัดกันเด็ดขาด
+            // 3. ฟังก์ชันวาดการ์ดแสดงผลข้อมูล
             function renderBusinessCards(dataList) {
                 if (!cardsBox) return;
                 cardsBox.innerHTML = '';
+                if (dataList.length === 0) {
+                    cardsBox.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: #64748b;">ไม่พบข้อมูลสถานประกอบการในระบบ</div>';
+                    return;
+                }
                 dataList.forEach(function(item) {
-                    // แยกตัวแปรเก็บลิงก์รูปภาพให้ปลอดภัยสูงสุด
                     var storeImage = item.imgUrl ? item.imgUrl : 'data:image/svg+xml;utf8,<svg xmlns="http://w3.org" width="100" height="100"><rect width="100" height="100" fill="%23cbd5e1"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="8" fill="%2364748b">ไม่มีรูปภาพหน้าร้าน</text></svg>';
                     var storeMap = item.mapUrl ? item.mapUrl : '';
 
                     var cardHTML = '<div class="biz-card" style="overflow:hidden; display:flex; flex-direction:column; background:white; border-radius:0.75rem; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.1);">' +
-                        '<div style="width:100%; height:160px; background-color:#cbd5e1; background-image:url(' + storeImage + '); background-size:cover; background-position:center; background-repeat:no-repeat;"></div>' +
+                        '<div style="width:100%; height:160px; background-color:#cbd5e1; background-image:url(\'' + storeImage + '\'); background-size:cover; background-position:center; background-repeat:no-repeat;"></div>' +
                         '<div style="padding:1.25rem; flex-grow:1; display:flex; flex-direction:column; justify-content:space-between;">' +
                             '<div>' +
                                 '<div style="display:flex; justify-content:space-between; margin-bottom:0.5rem">' +
@@ -297,27 +323,27 @@
                             '</div>' +
                         '</div>' +
                         '<div class="card-footer">' +
-                            '<span>อัปเดตล่าสุด: 10 พ.ย. 2569</span>' +
+                            '<span>ฐานข้อมูลออนไลน์</span>' +
                             '<span class="btn-link btn-view-details" data-id="' + item.id + '" style="cursor:pointer">ดูรายละเอียด →</span>' +
                         '</div>' +
                     '</div>';
                     cardsBox.insertAdjacentHTML('beforeend', cardHTML);
                 });
             }
-            // 3. ระบบค้นหาข้อมูลตามหมู่และคำค้นหา
+            // 4. ระบบค้นหาข้อมูลตามหมู่และคำค้นหา
             document.getElementById('btn-search-trigger').addEventListener('click', function() {
                 var searchVal = document.getElementById('main-search-input').value.trim().toLowerCase();
                 var villageVal = document.getElementById('main-village-select').value;
                 var filtered = mockDatabase.filter(function(item) {
-                    var matchText = !searchVal || item.bizName.toLowerCase().includes(searchVal) || item.ownerName.toLowerCase().includes(searchVal);
-                    var matchVillage = !villageVal || item.address.includes('หมู่ ' + villageVal) || item.address.includes('หมู่ที่ ' + villageVal);
+                    var matchText = !searchVal || String(item.bizName).toLowerCase().includes(searchVal) || String(item.ownerName).toLowerCase().includes(searchVal);
+                    var matchVillage = !villageVal || String(item.address).includes('หมู่ ' + villageVal) || String(item.address).includes('หมู่ที่ ' + villageVal);
                     return matchText && matchVillage;
                 });
                 renderBusinessCards(filtered);
             });
 
-            // 4. การจัดการปุ่มกดเปิด/ปิด ป๊อปอัปกรอกและแสดงข้อมูล (ล็อกระบบปุ่มปิดหน้าต่างให้ทำงานแม่นยำ)
-            document.addEventListener('click', function(e) {
+            // 5. การจัดการปุ่มกดเปิด/ปิด ป๊อปอัปกรอกและแสดงข้อมูล
+            document.addEventListener('click', async function(e) {
                 if (e.target && e.target.id === 'btn-trigger-add') {
                     selectedEditId = null;
                     dataForm.reset();
@@ -325,10 +351,10 @@
                     editorPopup.style.display = 'flex';
                 }
                 if (e.target && e.target.classList.contains('btn-edit')) {
-                    var id = parseInt(e.target.getAttribute('data-id'));
-                    var target = mockDatabase.find(function(i) { return i.id === id; });
+                    var id = e.target.getAttribute('data-id');
+                    var target = mockDatabase.find(function(i) { return String(i.id) === String(id); });
                     if (!target) return;
-                    selectedEditId = id;
+                    selectedEditId = target.id;
                     document.getElementById('editor-title-text').textContent = '✏️ แก้ไขข้อมูลผู้ประกอบการ';
                     document.getElementById('field-status').value = target.status;
                     document.getElementById('field-lic-no').value = target.licenseNo;
@@ -342,29 +368,27 @@
                     editorPopup.style.display = 'flex';
                 }
                 if (e.target && e.target.classList.contains('btn-delete')) {
-                    var deleteId = parseInt(e.target.getAttribute('data-id'));
-                    if (confirm('⚠️ ต้องการลบข้อมูลรายนี้ใช่หรือไม่?')) {
-                        mockDatabase = mockDatabase.filter(function(i) { return i.id !== deleteId; });
-                        localStorage.setItem('bizDatabase', JSON.stringify(mockDatabase));
+                    var deleteId = e.target.getAttribute('data-id');
+                    if (confirm('⚠️ ต้องการลบข้อมูลรายนี้ใช่หรือไม่? (ข้อมูลจะถูกลบออกจาก Google Sheets ทันที)')) {
+                        mockDatabase = mockDatabase.filter(function(i) { return String(i.id) !== String(deleteId); });
                         updateDashboardStats();
                         renderBusinessCards(mockDatabase);
+                        await syncToSheets({ action: 'delete', id: deleteId });
                     }
                 }
                 if (e.target && e.target.id === 'btn-cancel-editor') {
                     editorPopup.style.display = 'none';
                 }
                 if (e.target && e.target.classList.contains('btn-view-details')) {
-                    var viewId = parseInt(e.target.getAttribute('data-id'));
-                    var viewTarget = mockDatabase.find(function(i) { return i.id === viewId; });
+                    var viewId = e.target.getAttribute('data-id');
+                    var viewTarget = mockDatabase.find(function(i) { return String(i.id) === String(viewId); });
                     if (!viewTarget) return;
 
                     var detailsBox = document.getElementById('view-details-content');
                     if (detailsBox) {
-                        // 📸 สั่งให้ฉีดแท็กรูปภาพหน้าร้าน (img) เข้าไปแสดงผลด้านบนสุดของกล่องป๊อปอัปดูรายละเอียด
-                        var popImage = viewTarget.imgUrl ? viewTarget.imgUrl : 'data:image/svg+xml;utf8,<svg xmlns="http://w3.org" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23cbd5e1"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="6" fill="%2364748b">ไม่มีรูปภาพหน้าร้าน</text></svg>';
-                        
+                        var popImage = viewTarget.imgUrl ? viewTarget.imgUrl : 'data:image/svg+xml;utf8,<svg xmlns="http://w3.org" width="100" height="100"><rect width="100" height="100" fill="%23cbd5e1"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="6" fill="%2364748b">ไม่มีรูปภาพหน้าร้าน</text></svg>';
                         detailsBox.innerHTML = 
-                            '<div style="width:100%; height:200px; background:#cbd5e1 url(' + popImage + ') center/cover no-repeat; border-radius:0.5rem; margin-bottom:0.5rem;"></div>' +
+                            '<div style="width:100%; height:200px; background-color:#cbd5e1; background-image:url(\'' + popImage + '\'); background-size:cover; background-position:center; background-repeat:no-repeat; border-radius:0.5rem; margin-bottom:0.75rem;"></div>' +
                             '<p style="margin-bottom:0.5rem;"><strong>สถานะใบอนุญาต:</strong> ' + viewTarget.statusText + '</p>' +
                             '<p style="margin-bottom:0.5rem;"><strong>เลขที่ใบอนุญาต:</strong> ' + viewTarget.licenseNo + '</p>' +
                             '<p style="margin-bottom:0.5rem;"><strong>ชื่อสถานประกอบการ:</strong> ' + viewTarget.bizName + '</p>' +
@@ -373,7 +397,6 @@
                             '<p style="margin-bottom:0.5rem;"><strong>ที่ตั้งสถานประกอบการ:</strong> ' + viewTarget.address + '</p>' +
                             '<p style="margin-bottom:0.5rem;"><strong>วันหมดอายุใบอนุญาต:</strong> ' + viewTarget.expireDate + '</p>';
                     }
-                            
                     if (viewPopup) viewPopup.style.display = 'flex';
                 }
                 if (e.target && e.target.id === 'btn-close-view') {
@@ -381,50 +404,50 @@
                 }
             });
 
-            // 5. ระบบส่งฟอร์มบันทึกค่าลงฐานข้อมูลเครื่องถาวร (รวมพิกัดแผนที่และลิงก์รูปภาพ)
-            dataForm.addEventListener('submit', function(e) {
+            // 6. ระบบส่งฟอร์มบันทึกค่าขึ้น Google Sheets
+            dataForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
+                var submitBtn = dataForm.querySelector('.btn-submit');
+                var originalBtnText = submitBtn.textContent;
+                submitBtn.textContent = '⏳ กำลังบันทึก...';
+                submitBtn.disabled = true;
+
                 var statusVal = document.getElementById('field-status').value;
                 var statusTextVal = document.getElementById('field-status').options[document.getElementById('field-status').selectedIndex].text;
                 var mapUrlVal = document.getElementById('field-map-url') ? document.getElementById('field-map-url').value.trim() : '';
                 var imgUrlVal = document.getElementById('field-img-url') ? document.getElementById('field-img-url').value.trim() : '';
 
+                var itemData = {
+                    id: selectedEditId ? selectedEditId : Date.now(),
+                    status: statusVal,
+                    statusText: statusTextVal,
+                    licenseNo: document.getElementById('field-lic-no').value,
+                    bizName: document.getElementById('field-biz-name').value,
+                    ownerName: document.getElementById('field-owner-name').value,
+                    typeText: document.getElementById('field-type').value,
+                    address: document.getElementById('field-address').value,
+                    expireDate: document.getElementById('field-expire-date').value,
+                    mapUrl: mapUrlVal,
+                    imgUrl: imgUrlVal
+                };
+
                 if (selectedEditId) {
-                    var item = mockDatabase.find(function(i) { return i.id === selectedEditId; });
-                    if (item) {
-                        item.status = statusVal;
-                        item.statusText = statusTextVal;
-                        item.licenseNo = document.getElementById('field-lic-no').value;
-                        item.bizName = document.getElementById('field-biz-name').value;
-                        item.ownerName = document.getElementById('field-owner-name').value;
-                        item.typeText = document.getElementById('field-type').value;
-                        item.address = document.getElementById('field-address').value;
-                        item.expireDate = document.getElementById('field-expire-date').value;
-                        item.mapUrl = mapUrlVal;
-                        item.imgUrl = imgUrlVal;
-                    }
+                    var index = mockDatabase.findIndex(function(i) { return String(i.id) === String(selectedEditId); });
+                    if (index !== -1) mockDatabase[index] = itemData;
+                    await syncToSheets({ action: 'edit', data: itemData });
                 } else {
-                    mockDatabase.push({
-                        id: Date.now(),
-                        status: statusVal,
-                        statusText: statusTextVal,
-                        licenseNo: document.getElementById('field-lic-no').value,
-                        bizName: document.getElementById('field-biz-name').value,
-                        ownerName: document.getElementById('field-owner-name').value,
-                        typeText: document.getElementById('field-type').value,
-                        address: document.getElementById('field-address').value,
-                        expireDate: document.getElementById('field-expire-date').value,
-                        mapUrl: mapUrlVal,
-                        imgUrl: imgUrlVal
-                    });
+                    mockDatabase.push(itemData);
+                    await syncToSheets({ action: 'add', data: itemData });
                 }
-                localStorage.setItem('bizDatabase', JSON.stringify(mockDatabase));
+
                 updateDashboardStats();
                 renderBusinessCards(mockDatabase);
                 editorPopup.style.display = 'none';
+                submitBtn.textContent = originalBtnText;
+                submitBtn.disabled = false;
             });
 
-            // 6. ฟังก์ชันจำกัดสิทธิ์โหมดคนนอกเปิดดูอย่างเดียว (Viewer Mode บังคับซ่อนเด็ดขาด)
+            // 7. ฟังก์ชันจำกัดสิทธิ์โหมดคนนอกเปิดดูอย่างเดียว
             function applyViewMode() {
                 var urlParams = new URLSearchParams(window.location.search);
                 if (urlParams.get('mode') === 'view' || window.location.href.indexOf('mode=view') !== -1) {
@@ -437,12 +460,10 @@
                 }
             }
 
-            // สั่งรันระบบสรุปผลและวาดการ์ดครั้งแรกสุดเมื่อเบราว์เซอร์พร้อมทำงาน
-            updateDashboardStats();
-            renderBusinessCards(mockDatabase);
+            // เริ่มต้นระบบ: ดึงข้อมูลจาก Google Sheets ทันทีที่เปิดเว็บ
+            loadDatabaseFromSheets();
             applyViewMode();
 
-            // ล็อกความปลอดภัยป้องกันปุ่มหลุดซ้ำซ้อนขณะทำการค้นหาข้อมูลคำค้นหา
             var originalRender = renderBusinessCards;
             renderBusinessCards = function(dataList) {
                 originalRender(dataList);
